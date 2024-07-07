@@ -1,0 +1,8 @@
+selenium==4.21.0
+# SQLAlchemy==1.4.52
+# SQLAlchemy-JSONField==1.0.2
+# SQLAlchemy-Utils==0.41.2
+# beautifulsoup4==4.12.3
+# mysql-connector-python==8.4.0
+# mysqlclient==2.4.2
+# numpy
