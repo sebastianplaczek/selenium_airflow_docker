@@ -165,3 +165,10 @@ cython_debug/
 database
 rabbit
 geckodriver
+
+logs/
+mysql
+todo.txt
+commands.txt
+airflow.cfg
+
