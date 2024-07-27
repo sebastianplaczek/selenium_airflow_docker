@@ -27,25 +27,25 @@ from importlib.machinery import SourceFileLoader
 pwd = os.path.dirname(os.path.realpath(__file__)) + "/models.py"
 models = SourceFileLoader("models", pwd).load_module()
 
-Session = models.Session()
-Offers = models.Offers()
-OtodomWebsite = models.OtodomWebsite()
-ScrapInfo = models.ScrapInfo()
-OffersLoc = models.OffersLoc()
-Runtime = models.Runtime()
-ErrorLogs = models.ErrorLogs()
-CeleryTasks = models.CeleryTasks()
+# Session = models.Session()
+# Offers = models.Offers()
+# OtodomWebsite = models.OtodomWebsite()
+# ScrapInfo = models.ScrapInfo()
+# OffersLoc = models.OffersLoc()
+# Runtime = models.Runtime()
+# ErrorLogs = models.ErrorLogs()
+# CeleryTasks = models.CeleryTasks()
 
-# from models import (
-#     Session,
-#     Offers,
-#     OtodomWebsite,
-#     ScrapInfo,
-#     OffersLoc,
-#     Runtime,
-#     ErrorLogs,
-#     CeleryTasks,
-# )
+from models import (
+    Session,
+    Offers,
+    OtodomWebsite,
+    ScrapInfo,
+    OffersLoc,
+    Runtime,
+    ErrorLogs,
+    CeleryTasks,
+)
 
 
 WEBS = {
@@ -59,10 +59,12 @@ WEBS = {
 
 class Scraper:
 
-    def __init__(self, save_to_db=True, threads=None):
+    def __init__(self, save_to_db=True, threads=None,save_to_csv=False):
         self.save_to_db = save_to_db
+        self.save_to_csv = save_to_csv
         self.threads = threads
         self.check_scrap_num()
+        self.data = []
 
     def check_scrap_num(self):
         session = Session()
@@ -203,7 +205,7 @@ class Scraper:
                 session.add(error)
 
             try:
-                title_element = offer.find("p", {"class": ["css-3czwt4 endh1010"]})
+                title_element = offer.find("p", {"class": ["css-f0qev1 e1g5xnx10"]})
                 title = title_element.text
             except Exception as e:
                 value = title_element.text if title_element else None
@@ -319,7 +321,6 @@ class Scraper:
                 )
                 session.add(error)
 
-
             new_offer = Offers(
                 type=type,
                 link=link,
@@ -338,7 +339,28 @@ class Scraper:
                 price_per_m=price_per_m,
                 additional_params=str(params_dd),
             )
+
             session.add(new_offer)
+
+            if self.save_to_csv:
+                self.data.append({
+                    "type" : type,
+                    "link" : link,
+                    "title" : title,
+                    "seller" : seller,
+                    "seller_type" : seller_type,
+                    "bumped" : bumped,
+                    "page" : page_num,
+                    "position" : position,
+                    "n_scrap" : self.n_scrap,
+                    "address" : address,
+                    "rooms" : rooms,
+                    "floor" : floor,
+                    "size" : size,
+                    "price" : price,
+                    "price_per_m" : price_per_m,
+                    "additional_params" : str(params_dd)
+                })
 
         # except Exception as e:
         #     print(e)
@@ -406,6 +428,24 @@ class Scraper:
         session.close()
         return pages_to_scrap
 
+    def test_run(self):
+        for type in [
+        "dzialki",
+        "mieszkanie_pierwotny",
+        "mieszkanie_wtorny",
+        "dom_pierwotny",
+        "dom_wtorny",
+    ]:
+            chunk_size = 1
+            n_pages = 1
+            for i in range(0, 1, chunk_size):
+                start = i + 1
+                size = min(chunk_size, n_pages - i)
+                self.scrap_pages(type, start, size)
+        
+        df = pd.DataFrame(self.data)
+        df.to_excel("test.xlsx",index=False)
+
 
 # if __name__ == "__main__":
 #     model = Scraper(save_to_db=False, threads=1)
@@ -426,6 +466,11 @@ class Scraper:
 #             model.scrap_pages(type, start, size)
 
 
+# if __name__ == "__main__":
+#     model = Scraper()
+#     model.check_pages()
+
 if __name__ == "__main__":
-    model = Scraper()
-    model.check_pages()
+    model = Scraper(save_to_db=False,save_to_csv=True,threads=1)
+    model.test_run()
+

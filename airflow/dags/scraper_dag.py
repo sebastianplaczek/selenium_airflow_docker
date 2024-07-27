@@ -31,17 +31,17 @@ with DAG(
     "scrap_dag_0",
     default_args=default_args,
     description="A simple async DAG",
-    schedule_interval=timedelta(days=1),
+    schedule_interval=None,
     catchup=False,
     max_active_tasks=4,
     concurrency=4,
 ) as dag:
 
-    with open('scrap_conf.yaml', 'r') as file:
+    with open("scrap_conf.yaml", "r") as file:
         conf = yaml.safe_load(file)
 
     tasks = []
-    for type,n_pages in conf.items():
+    for type, n_pages in conf.items():
         chunk_size = 25
         # if type in ['dzialki']:
         for i in range(0, n_pages, chunk_size):
@@ -51,7 +51,7 @@ with DAG(
                 op_args=[i + 1, chunk_size, n_pages, type],
                 dag=dag,
                 pool="async_pool",
-                retries=3, 
+                retries=3,
                 retry_delay=timedelta(minutes=5),
             )
             tasks.append(task)

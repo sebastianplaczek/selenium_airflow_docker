@@ -18,7 +18,7 @@ module = SourceFileLoader("otodom_filler", pwd).load_module()
 def filler_conf():
     model = module.Filler()
     model.conf_for_filler(
-        columns="id", from_table="offers", where_cond="where n_scrap>0"
+        columns="id", from_table="offers", where_cond="where n_scrap>6"
     )
 
 
@@ -32,7 +32,7 @@ with DAG(
     "filler_conf_dag",
     default_args=default_args,
     description="Check start and end id from offers to fill",
-    schedule_interval=timedelta(days=1),
+    schedule_interval=None,
     catchup=False,
 ) as dag:
 

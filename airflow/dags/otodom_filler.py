@@ -142,7 +142,7 @@ class Filler:
             address = offer.address
             print(address)
             if not offer_loc:
-                if address != "":
+                if address != "" and address:
 
                     data = self.nominatim_request(address, offer_id)
                     if data:

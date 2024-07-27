@@ -15,9 +15,9 @@ pwd = os.path.dirname(os.path.realpath(__file__)) + "/otodom_scraper.py"
 module = SourceFileLoader("otodom_scraper", pwd).load_module()
 
 
-def pages_info():
-    model = module.Scraper()
-    model.check_pages()
+def run():
+    model = module.Scraper(save_to_db=False, save_to_csv=True, threads=1)
+    model.test_run()
 
 
 default_args = {
@@ -27,7 +27,7 @@ default_args = {
 }
 
 with DAG(
-    "check_pages_dag",
+    "test_scraper",
     default_args=default_args,
     description="Check available pages",
     schedule_interval=None,
@@ -35,7 +35,7 @@ with DAG(
 ) as dag:
 
     task = PythonOperator(
-        task_id=f"check_pages",
-        python_callable=pages_info,
+        task_id=f"check",
+        python_callable=run,
         dag=dag,
     )

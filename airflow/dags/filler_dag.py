@@ -30,8 +30,8 @@ default_args = {
 with DAG(
     "filler_dag1",
     default_args=default_args,
-    description="A simple async DAG",
-    schedule_interval=timedelta(days=1),
+    description="A simple async DAG",   
+    schedule_interval=None,
     catchup=False,
     max_active_tasks=4,
     concurrency=4,

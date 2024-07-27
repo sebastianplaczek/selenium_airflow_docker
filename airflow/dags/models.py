@@ -90,7 +90,7 @@ class CeleryTasks(Base):
     __tablename__ = "celery_tasks"
     id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
     task_id = Column(Integer)
-    type = Column(String(20))
+    type = Column(String(50))
     create_date = Column(DateTime, default=datetime.now())
     status = Column(String(20))
     done = Column(Boolean, default=0)
