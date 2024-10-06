@@ -21,6 +21,16 @@ def scrap_worker(start, chunk_size, n_pages, type):
     model.scrap_pages(type, start, size)
 
 
+def check_pages():
+    model = P.Scraper(threads=5)
+    model.check_pages()
+
+
+def test_scraper():
+    model = P.Scraper(save_to_db=False, test_run=True, threads=5)
+    model.run_tests()
+
+
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -28,7 +38,7 @@ default_args = {
 }
 
 with DAG(
-    "scrap_dag_0",
+    "scrap_offers_dag",
     default_args=default_args,
     description="A simple async DAG",
     schedule_interval=None,
@@ -36,6 +46,18 @@ with DAG(
     max_active_tasks=4,
     concurrency=4,
 ) as dag:
+
+    test_scraper_task = PythonOperator(
+        task_id=f"tests",
+        python_callable=test_scraper,
+        dag=dag,
+    )
+
+    check_pages_task = PythonOperator(
+        task_id=f"check_pages",
+        python_callable=check_pages,
+        dag=dag,
+    )
 
     with open("scrap_conf.yaml", "r") as file:
         conf = yaml.safe_load(file)
@@ -58,4 +80,4 @@ with DAG(
 
         print(f"{type} added to queue")
 
-    tasks
+    test_scraper_task >> check_pages_task >> tasks

@@ -28,36 +28,26 @@ default_args = {
 }
 
 with DAG(
-    "filler_dag",
+    "test_filler",
     default_args=default_args,
     description="A simple async DAG",
     schedule_interval=None,
     catchup=False,
-    max_active_tasks=15,
-    concurrency=15,
+    max_active_tasks=1,
+    concurrency=1,
 ) as dag:
 
-    with open("fill_conf.yaml", "r") as file:
-        conf = yaml.safe_load(file)
-
     tasks = []
-    chunk_size = 10000
-    len_numbers = len(str(conf["end_id"]))
-    for i in range(conf["start_id"], conf["end_id"], chunk_size):
-        if len(str(i)) < len_numbers:
-            start_index = (len_numbers - len(str(i))) * "0" + str(i)
-        else:
-            start_index = i
-        if len(str(i + chunk_size)) < len_numbers:
-            end_index = (len_numbers - len(str(i + chunk_size))) * "0" + str(i)
-        else:
-            end_index = i
+    chunk_size = 10
+    start = 54567
+    end = 54567 + 10
+    for i in range(start, end, chunk_size):
         task = PythonOperator(
-            task_id=f"fill_{start_index}_{end_index}",
+            task_id=f"fill_{start}_{end}",
             python_callable=fill_worker,
-            op_args=[i + 1, chunk_size, conf["end_id"]],
+            op_args=[i + 1, chunk_size, end],
             dag=dag,
-            pool="filler_pool",
+            pool="async_pool",
             retries=3,
             retry_delay=timedelta(minutes=5),
         )

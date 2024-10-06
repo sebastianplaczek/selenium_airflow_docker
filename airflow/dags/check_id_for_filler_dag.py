@@ -18,7 +18,7 @@ module = SourceFileLoader("otodom_filler", pwd).load_module()
 def filler_conf():
     model = module.Filler()
     model.conf_for_filler(
-        columns="id", from_table="offers", where_cond="where n_scrap>6"
+        columns="id", from_table="offers", where_cond="where offer_loc_id is NULL"
     )
 
 

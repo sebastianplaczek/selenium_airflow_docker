@@ -59,9 +59,9 @@ WEBS = {
 
 class Scraper:
 
-    def __init__(self, save_to_db=True, threads=None,save_to_csv=False):
+    def __init__(self, save_to_db=True, threads=None, test_run=False):
         self.save_to_db = save_to_db
-        self.save_to_csv = save_to_csv
+        self.test_run = test_run
         self.threads = threads
         self.check_scrap_num()
         self.data = []
@@ -112,7 +112,8 @@ class Scraper:
             html = self.driver.page_source
             # self.driver.close()
             soup = BeautifulSoup(html, "html.parser")
-            buttons = soup.find_all("li", {"class": "css-1tospdx"})
+            buttons = soup.find_all("li", {"class": "css-43nhzf"})
+
             self.number_of_pages = int(buttons[-1].text)
 
             website = OtodomWebsite(
@@ -123,6 +124,9 @@ class Scraper:
             conf[type] = self.number_of_pages
 
             print(f"Number of pages : {type} {self.number_of_pages}")
+
+            if self.number_of_pages <1:
+                raise ValueError(f"{type} has {self.number_of_pages} number of pages")
 
         session.commit()
         session.close()
@@ -176,7 +180,7 @@ class Scraper:
                 session.add(error)
 
             try:
-                price_element = offer.find("div", {"class": ["css-fdwt8z e1nxvqrh0"]})
+                price_element = offer.find("div", {"class": ["css-fdwt8z escb8gg0"]})
                 price = price_element.text
                 bad_character = self.find_wrong_letters(price[:-2])
                 if price == "Zapytaj o cenę":
@@ -193,9 +197,7 @@ class Scraper:
                 session.add(error)
 
             try:
-                address_element = offer.find(
-                    "div", {"class": ["css-12h460e e1nxvqrh1"]}
-                )
+                address_element = offer.find("div", {"class": ["css-12h460e escb8gg1"]})
                 address = address_element.text
             except Exception as e:
                 value = address_element.text if address_element else None
@@ -205,7 +207,7 @@ class Scraper:
                 session.add(error)
 
             try:
-                title_element = offer.find("p", {"class": ["css-f0qev1 e1g5xnx10"]})
+                title_element = offer.find("p", {"class": ["css-u3orbr e1g5xnx10"]})
                 title = title_element.text
             except Exception as e:
                 value = title_element.text if title_element else None
@@ -294,7 +296,7 @@ class Scraper:
                 session.add(error)
 
             try:
-                seller_element = offer.find("div", {"class": ["css-15pdjbs es3mydq3"]})
+                seller_element = offer.find("div", {"class": ["css-1sylyl4 es3mydq3"]})
                 seller = seller_element.text
             except Exception as e:
                 seller = None
@@ -342,25 +344,27 @@ class Scraper:
 
             session.add(new_offer)
 
-            if self.save_to_csv:
-                self.data.append({
-                    "type" : type,
-                    "link" : link,
-                    "title" : title,
-                    "seller" : seller,
-                    "seller_type" : seller_type,
-                    "bumped" : bumped,
-                    "page" : page_num,
-                    "position" : position,
-                    "n_scrap" : self.n_scrap,
-                    "address" : address,
-                    "rooms" : rooms,
-                    "floor" : floor,
-                    "size" : size,
-                    "price" : price,
-                    "price_per_m" : price_per_m,
-                    "additional_params" : str(params_dd)
-                })
+            if self.test_run:
+                self.data.append(
+                    {
+                        "type": type,
+                        "link": link,
+                        "title": title,
+                        "seller": seller,
+                        "seller_type": seller_type,
+                        "bumped": bumped,
+                        "page": page_num,
+                        "position": position,
+                        "n_scrap": self.n_scrap,
+                        "address": address,
+                        "rooms": rooms,
+                        "floor": floor,
+                        "size": size,
+                        "price": price,
+                        "price_per_m": price_per_m,
+                        "additional_params": str(params_dd),
+                    }
+                )
 
         # except Exception as e:
         #     print(e)
@@ -402,7 +406,7 @@ class Scraper:
         # retry = 0
         # completed = 0
         for page_num in range(start_page, start_page + chunk_size):
-            for z in range(0,3):
+            for z in range(0, 3):
                 try:
                     self.scrap_offers(type, page_num)
                     break
@@ -428,23 +432,55 @@ class Scraper:
         session.close()
         return pages_to_scrap
 
-    def test_run(self):
+    def run_tests(self):
+        print('Start test run')
         for type in [
-        "dzialki",
-        "mieszkanie_pierwotny",
-        "mieszkanie_wtorny",
-        "dom_pierwotny",
-        "dom_wtorny",
-    ]:
+            "dzialki",
+            "mieszkanie_pierwotny",
+            "mieszkanie_wtorny",
+            "dom_pierwotny",
+            "dom_wtorny",
+        ]:
             chunk_size = 1
             n_pages = 1
             for i in range(0, 1, chunk_size):
                 start = i + 1
                 size = min(chunk_size, n_pages - i)
                 self.scrap_pages(type, start, size)
-        
-        df = pd.DataFrame(self.data)
-        df.to_excel("test.xlsx",index=False)
+
+            df = pd.DataFrame(self.data)
+
+            df_size = df.shape[0]
+            print(df_size)
+
+            if df_size ==0:
+                raise ValueError(f"No offers in type {type}")
+
+            for col in df.columns:
+                null_count = df[col].isnull().sum()
+                null_percent = null_count / df_size
+                if col in ["type","link","title","bumped","page","position","n_scrap","address","size","price","price_per_m","additional_parms"]:
+                    if null_percent > 0.9:
+                        raise ValueError(
+                            f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
+                        )
+                elif col in ["seller","seller_type"]:
+                    if null_count == df_size:
+                        raise ValueError(f"Type: {type} column: {col} has all values null")
+                elif col=="rooms" and type != "dzialki":
+                    if null_percent > 0.9:
+                        raise ValueError(
+                            f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
+                        )
+                elif col =="floor" and type in ["mieszkanie_wtorny","mieszkanie_pierwotny"]:
+                    if null_percent > 0.9:
+                        raise ValueError(
+                            f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
+                        )
+                else:
+                    pass
+
+            self.data = []
 
 
 # if __name__ == "__main__":
@@ -471,6 +507,5 @@ class Scraper:
 #     model.check_pages()
 
 if __name__ == "__main__":
-    model = Scraper(save_to_db=False,save_to_csv=True,threads=1)
+    model = Scraper(save_to_db=False, test_run=True, threads=1)
     model.test_run()
-

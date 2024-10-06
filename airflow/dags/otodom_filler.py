@@ -46,8 +46,11 @@ import yaml
 
 class Filler:
 
-    def __init__(self, threads=None):
+    def __init__(self, threads=None, save_to_db=True, save_to_csv=False):
         self.threads = threads
+        self.save_to_db = save_to_db
+        self.save_to_csv = save_to_csv
+        self.data = []
 
     def init_driver(self):
         firefox_options = Options()
@@ -88,10 +91,13 @@ class Filler:
                 address = " ".join(address_list[i:])
             except:
                 pass
-            url = f"http://172.22.0.3:8080/search?q={address}&format=json&addressdetails=1&limit=1"
+            url = f"http://172.22.0.5:8080/search?q={address}&format=json&addressdetails=1&limit=1"
             # url = f"http://localhost:8999/search?q={address}&format=json&addressdetails=1&limit=1"
+            print(url)
             response = requests.get(url)
+            print(response)
             status_code = response.status_code
+            print(status_code)
 
             try:
                 data = response.json()
@@ -125,83 +131,137 @@ class Filler:
                         city = None
 
             if city:
-                return data
+                params = {}
+                params["lat"] = float(data[0]["lat"])
+                params["lon"] = float(data[0]["lon"])
+                api_address = data[0]["address"]
 
-        return data
+                try:
+                    params["road"] = api_address["road"]
+                except:
+                    params["road"] = None
+                try:
+                    params["city"] = api_address["town"]
+                except:
+                    try:
+                        params["city"] = api_address["city"]
+                    except:
+                        try:
+                            params["city"] = api_address["village"]
+                        except:
+                            params["city"] = None
+                try:
+                    params["municipality"] = api_address["municipality"]
+                except:
+                    params["municipality"] = None
+                try:
+                    params["county"] = api_address["county"]
+                except:
+                    params["county"] = None
+                try:
+                    params["vivodeship"] = api_address["state"].split(" ")[1]
+                except:
+                    params["vivodeship"] = None
+                try:
+                    params["postcode"] = api_address["postcode"]
+                except:
+                    params["postcode"] = None
+
+                return params
+        else:
+            return None
 
     def update_row(self, offer_id):
-
+        print(f"Offer id {offer_id}")
         session = Session()
         offer = session.query(Offers).get(offer_id)
 
-        if offer:
+        if offer and offer.offer_loc_id is None:
             offer_loc = (
-                session.query(OffersLoc).filter(OffersLoc.link == offer.link).first()
+                session.query(OffersLoc)
+                .filter(OffersLoc.link == offer.link)
+                .order_by(OffersLoc.id.desc())
+                .first()
             )
 
             address = offer.address
             print(address)
+
             if not offer_loc:
                 if address != "" and address:
 
-                    data = self.nominatim_request(address, offer_id)
-                    if data:
-                        lat = float(data[0]["lat"])
-                        lon = float(data[0]["lon"])
-                        api_address = data[0]["address"]
+                    params = self.nominatim_request(address, offer_id)
 
-                        try:
-                            road = api_address["road"]
-                        except:
-                            road = None
-                        try:
-                            city = api_address["town"]
-                        except:
-                            try:
-                                city = api_address["city"]
-                            except:
-                                try:
-                                    city = api_address["village"]
-                                except:
-                                    city = None
-                        try:
-                            municipality = api_address["municipality"]
-                        except:
-                            municipality = None
-                        try:
-                            county = api_address["county"]
-                        except:
-                            county = None
-                        try:
-                            vivodeship = api_address["state"].split(" ")[1]
-                        except:
-                            vivodeship = None
-                        try:
-                            postcode = api_address["postcode"]
-                        except:
-                            postcode = None
-
+                    if params:
                         new_offer_loc = OffersLoc(
-                            lat=lat,
-                            lon=lon,
-                            city=city,
-                            municipality=municipality,
-                            county=county,
-                            vivodeship=vivodeship,
-                            postcode=postcode,
+                            lat=params["lat"],
+                            lon=params["lon"],
+                            city=params["city"],
+                            municipality=params["municipality"],
+                            county=params["county"],
+                            vivodeship=params["vivodeship"],
+                            postcode=params["postcode"],
                             link=offer.link,
                             address=offer.address,
                             type=offer.type,
                             filled=1,
                         )
-
+                        add_new_offer_loc = True
+                    else:
+                        new_offer_loc = OffersLoc(address="", filled=1)
+                        add_new_offer_loc = True
                 else:
                     new_offer_loc = OffersLoc(address="", filled=1)
+                    add_new_offer_loc = True
+            else:
+                if offer_loc.city:
+                    add_new_offer_loc = False
+                else:
+                    add_new_offer_loc = False
+                    if address != "" and address:
+                        params = self.nominatim_request(address, offer_id)
+                        offer_loc.lat = params["lat"]
+                        offer_loc.lon = params["lon"]
+                        offer_loc.city = params["city"]
+                        offer_loc.municipality = params["municipality"]
+                        offer_loc.county = params["county"]
+                        offer_loc.vivodeship = params["vivodeship"]
+                        offer_loc.postcode = params["postcode"]
+                        offer_loc.link = offer.link
+                        offer_loc.address = offer.address
+                        offer_loc.type = offer.type
+                        offer_loc.filled = 1
+                        session.commit()
 
-                session.add(new_offer_loc)
-                session.commit()
-                offer.offer_loc_id = new_offer_loc.id
-                session.commit()
+            if self.save_to_db:
+                if add_new_offer_loc:
+                    session.add(new_offer_loc)
+                    session.commit()
+                    offer.offer_loc_id = new_offer_loc.id
+                    session.commit()
+                else:
+                    if offer.offer_loc_id is None:
+                        offer.offer_loc_id = offer_loc.id
+                        session.commit()
+
+            if self.save_to_csv:
+                self.data.append(
+                    {
+                        "lat": new_offer_loc.lat,
+                        "lon": new_offer_loc.lon,
+                        "city": new_offer_loc.city,
+                        "municipality": new_offer_loc.municipality,
+                        "county": new_offer_loc.county,
+                        "vivodeship": new_offer_loc.vivodeship,
+                        "postcode": new_offer_loc.postcode,
+                        "link": new_offer_loc.link,
+                        "address": new_offer_loc.address,
+                        "type": new_offer_loc.type,
+                        "filled": new_offer_loc.filled,
+                    }
+                )
+        else:
+            print("Offer not found")
         session.close()
 
     def scrap_additional_params(self, offer_id):
@@ -231,22 +291,11 @@ class Filler:
         self.session.commit()
 
     def update_chunk_rows(self, start, chunk_size):
-        self.session = Session()
-        task = CeleryTasks(
-            type="nominatim",
-            status="QUEUE",
-            time_start=datetime.now(),
-            pages=chunk_size,
-            threads=self.threads,
-        )
+        print("Start")
         for i in range(start, start + chunk_size):
+            print(f"Start update {i} row")
             self.update_row(i)
-
-        task.time_end = datetime.now()
-        task.runtime = np.round((task.time_end - task.time_start).total_seconds(), 1)
-        task.status = "FINISHED"
-        self.session.commit()
-        self.session.close()
+            print(f"Finished update {i} row")
 
     def scrap_chunk_additional_params(self, id_list):
         self.init_driver()
@@ -260,11 +309,10 @@ class Filler:
 
 if __name__ == "__main__":
     model = Filler()
-    model.conf_for_filler(
-        columns="id", from_table="offers", where_cond="where n_scrap>0"
-    )
-    # id_list = [54567]
-    # model.update_chunk_rows(id_list, 1)
+    # model.conf_for_filler(
+    #     columns="id", from_table="offers", where_cond="where n_scrap>0"
+    # )
+    model.update_row(54567)
 
 # if __name__ == "__main__":
 #     model = Filler()

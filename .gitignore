@@ -171,4 +171,8 @@ mysql
 todo.txt
 commands.txt
 airflow.cfg
+conf_db.yaml
+fill_conf.yaml
+scrap_conf.yaml
+test.xlsx
 

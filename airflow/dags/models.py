@@ -10,10 +10,16 @@ from sqlalchemy import (
     DateTime,
     MetaData,
 )
+import yaml
 from sqlalchemy import inspect, create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+
+
+with open("conf_db.yaml", "r") as file:
+    conf = yaml.safe_load(file)
+
 
 Base = declarative_base()
 
@@ -124,8 +130,9 @@ class ErrorLogs(Base):
     exception = Column(String(1000))
 
 
-db_url = "mysql+pymysql://normal:qwerty123@172.22.0.2:3306/scrapper_db"
-# db_url = "mysql+pymysql://normal:qwerty123@127.0.0.1:3307/scrapper_db"
+
+db_url = f'mysql+pymysql://{conf["username"]}:{conf["password"]}@{conf["database_ip"]}/{conf["database_name"]}'
+
 engine = create_engine(
     db_url,
     pool_size=10,  # Domyślnie 5

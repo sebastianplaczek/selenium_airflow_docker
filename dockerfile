@@ -20,4 +20,5 @@ USER airflow
 RUN pip install --upgrade pip
 RUN pip install selenium
 RUN pip install PyMySQL==1.1.1
-RUN pip install install pyyaml
+RUN pip install PyYAML
+RUN pip install openpyxl
