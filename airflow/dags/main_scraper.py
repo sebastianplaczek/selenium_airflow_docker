@@ -27,14 +27,7 @@ from importlib.machinery import SourceFileLoader
 pwd = os.path.dirname(os.path.realpath(__file__)) + "/models.py"
 models = SourceFileLoader("models", pwd).load_module()
 
-# Session = models.Session()
-# Offers = models.Offers()
-# OtodomWebsite = models.OtodomWebsite()
-# ScrapInfo = models.ScrapInfo()
-# OffersLoc = models.OffersLoc()
-# Runtime = models.Runtime()
-# ErrorLogs = models.ErrorLogs()
-# CeleryTasks = models.CeleryTasks()
+from functools import wraps
 
 from models import (
     Session,
@@ -57,98 +50,117 @@ WEBS = {
 }
 
 
-class Scraper:
+class WebDriverManager():
 
-    def __init__(self, save_to_db=True, threads=None, test_run=False):
-        self.save_to_db = save_to_db
-        self.test_run = test_run
-        self.threads = threads
-        self.check_scrap_num()
-        self.data = []
+    def __init__(self,system):
+        self.set_options(system)
 
-    def check_scrap_num(self):
-        session = Session()
-        self.n_scrap = session.query(ScrapInfo).filter(ScrapInfo.active == 1).first().id
-        session.close()
+    def set_options(self,system):
+        self.firefox_options = Options()
+        self.firefox_options.add_argument("--headless")
+        self.firefox_options.add_argument("--no-sandbox")
+        self.firefox_options.add_argument("--disable-gpu")
+        self.firefox_options.add_argument("--incognito")
+        self.firefox_options.add_argument("--window-size=1600,900")
+        self.firefox_options.add_argument("--disable-dev-shm-usage")
 
+        if system == "linux":
+            self.service = FirefoxService(executable_path="/usr/local/bin/geckodriver")
+        elif system == "windows":
+            firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+            self.service = FirefoxService(
+                executable_path="C:\projects\small_scrapper\geckodriver\geckodriver.exe"
+            )
+            self.firefox_options.binary_location = firefox_binary_path
+
+        else:
+            raise ValueError(f"Wrong system type {system}")
+    
     def init_driver(self):
-        firefox_options = Options()
-        firefox_options.add_argument("--headless")
-        firefox_options.add_argument("--no-sandbox")
-        firefox_options.add_argument("--disable-gpu")
-        firefox_options.add_argument("--incognito")
-        firefox_options.add_argument("--window-size=1600,900")
-        firefox_options.add_argument("--disable-dev-shm-usage")
-        service = FirefoxService(executable_path="/usr/local/bin/geckodriver")
-        self.driver = webdriver.Firefox(options=firefox_options, service=service)
+        self.driver = webdriver.Firefox(options=self.firefox_options, service=self.service)
 
-    def run(self):
-        self.init_driver()
-        self.check_pages()
+    def close_driver(self):
+        if self.driver:
+            self.driver.quit()
+            self.driver.close()
 
-    def accept_cookies(self):
-        try:
-            self.driver.find_element(
-                By.XPATH, "/html/body/div[2]/div[2]/div/div[1]/div/div[2]/div/button[1]"
-            ).click()
-        except:
-            print("No cookies")
+class DatabaseManager:
 
-    def check_pages(self):
-        self.init_driver()
-        date = str(datetime.now()).replace(" ", "_").replace(":", "")
-        session = Session()
-        session.query(OtodomWebsite).update({"active": 0})
-        session.commit()
+    def __init(self,enabled = True):
+        self.enabled = enabled
+        self.read_conf()
 
-        conf = {}
-        for type, link in WEBS.items():
-            self.type = type
-            self.driver.get(link)
-            self.driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);"
-            )
-            time.sleep(2)
-            html = self.driver.page_source
-            # self.driver.close()
-            soup = BeautifulSoup(html, "html.parser")
-            buttons = soup.find_all("li", {"class": "css-43nhzf"})
+    def requires_enabled(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not self.enabled:
+                return
+            return func(self, *args, **kwargs)
+        return wrapper
 
-            self.number_of_pages = int(buttons[-1].text)
+    @requires_enabled
+    def read_conf(self):
+        with open("conf\conf_db.yaml", "r") as file:
+            self.conf = yaml.safe_load(file)
 
-            website = OtodomWebsite(
-                link=link, active=True, num_pages=self.number_of_pages, type=type
-            )
-            session.add(website)
+        db_url = f'mysql+pymysql://{conf["username"]}:{conf["password"]}@{conf["database_ip"]}/{conf["database_name"]}'
 
-            conf[type] = self.number_of_pages
+    @requires_enabled
+    def create_session(self):
+        db_url = f'mysql+pymysql://{self.conf["username"]}:{self.conf["password"]}@{self.conf["database_ip"]}/{self.conf["database_name"]}'
 
-            print(f"Number of pages : {type} {self.number_of_pages}")
+        engine = create_engine(
+            db_url,
+            pool_size=10,  # Domyślnie 5
+            max_overflow=20,  # Domyślnie 10
+            pool_timeout=30,  # Domyślnie 30 sekund
+            pool_recycle=1800,  # Recykluj połączenia co 30 minut
+        )
+        self.session = sessionmaker(bind=engine)
 
-            if self.number_of_pages <1:
-                raise ValueError(f"{type} has {self.number_of_pages} number of pages")
+    @requires_enabled
+    def end_session(self):
+        self.session.close()
 
-        session.commit()
-        session.close()
+    @requires_enabled
+    def commit(self):
+        self.session.commit()
 
-        with open("scrap_conf.yaml", "w") as file:
-            yaml.dump(conf, file, default_flow_style=False)
+    @requires_enabled
+    def add(self,object):
+        self.session.add(object)
 
-    def find_wrong_letters(self, my_str):
-        x = ""
-        for x in my_str:
-            try:
-                int(x)
-            except:
-                break
-        return x
+
+class MainScraper:
+
+    def __init__(self,system,save_to_db=True):    
+        self.web_driver_manager = FirefoxWebDriverManager(system=system)
+        self.database_manager = DatabaseManager(enabled=save_to_db)
+        self.set_conf_path(system)
+    
+    def set_conf_path(self,system):
+        if system=="windows":
+            self.conf_path = "conf\"
+        elif system== "linux":
+            self.conf_path = "conf/"
+        else:
+            raise ValueError(f"Wrong system type {system}")
+    
+    def parse_web(self,website)
+        self.web_driver_manager.init_driver()
+        self.web_driver_manager.driver.get(website)
+        html = self.web_driver_manager.driver.page_source
+        soup = BeautifulSoup(html, "html.parser")
+        self.web_driver_manager.close_driver()
+        return soup
+    
+    #parsowanie i logika dla paczki stron
+
 
     def scrap_offers(self, type, page_num):
-        start_time = datetime.now()
         website = WEBS[type] + f"&page={page_num}"
-        self.driver.get(website)
-        html = self.driver.page_source
-        soup = BeautifulSoup(html, "html.parser")
+
+        soup = self.parse_web(website)
 
         offers = soup.find_all("div", {"class": ["css-13gthep eeungyz2"]})
 
@@ -432,7 +444,7 @@ class Scraper:
         return pages_to_scrap
 
     def run_tests(self):
-        print('Start test run')
+        print("Start test run")
         for type in [
             "dzialki",
             "mieszkanie_pierwotny",
@@ -452,26 +464,44 @@ class Scraper:
             df_size = df.shape[0]
             print(df_size)
 
-            if df_size ==0:
+            if df_size == 0:
                 raise ValueError(f"No offers in type {type}")
 
             for col in df.columns:
                 null_count = df[col].isnull().sum()
                 null_percent = null_count / df_size
-                if col in ["type","link","title","bumped","page","position","n_scrap","address","size","price","price_per_m","additional_parms"]:
+                if col in [
+                    "type",
+                    "link",
+                    "title",
+                    "bumped",
+                    "page",
+                    "position",
+                    "n_scrap",
+                    "address",
+                    "size",
+                    "price",
+                    "price_per_m",
+                    "additional_parms",
+                ]:
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
                         )
-                elif col in ["seller","seller_type"]:
+                elif col in ["seller", "seller_type"]:
                     if null_count == df_size:
-                        raise ValueError(f"Type: {type} column: {col} has all values null")
-                elif col=="rooms" and type != "dzialki":
+                        raise ValueError(
+                            f"Type: {type} column: {col} has all values null"
+                        )
+                elif col == "rooms" and type != "dzialki":
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
                         )
-                elif col =="floor" and type in ["mieszkanie_wtorny","mieszkanie_pierwotny"]:
+                elif col == "floor" and type in [
+                    "mieszkanie_wtorny",
+                    "mieszkanie_pierwotny",
+                ]:
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
@@ -480,31 +510,3 @@ class Scraper:
                     pass
 
             self.data = []
-
-
-# if __name__ == "__main__":
-#     model = Scraper(save_to_db=False, threads=1)
-#     # links = [object.pages_from_db()[1]]
-#     # n_pages = links.num_pages
-#     n_pages = 5
-#     chunk_size = 5
-#     for type in [
-#         # "dzialki",
-#         "mieszkanie_pierwotny"
-#         # "mieszkanie_wtorny",
-#         # "dom_pierwotny",
-#         # "dom_wtorny",
-#     ]:
-#         for i in range(0, n_pages, chunk_size):
-#             start = i + 1
-#             size = min(chunk_size, n_pages - i)
-#             model.scrap_pages(type, start, size)
-
-
-# if __name__ == "__main__":
-#     model = Scraper()
-#     model.check_pages()
-
-if __name__ == "__main__":
-    model = Scraper(save_to_db=False, test_run=True, threads=1)
-    model.test_run()
