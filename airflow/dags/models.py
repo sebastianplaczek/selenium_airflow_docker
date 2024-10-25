@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
@@ -10,17 +9,13 @@ from sqlalchemy import (
     DateTime,
     MetaData,
 )
-import yaml
-from sqlalchemy import inspect, create_engine, MetaData
+from sqlalchemy import inspect, MetaData
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from main_scraper import DatabaseManager
 
 
-with open("conf_db.yaml", "r") as file:
-    conf = yaml.safe_load(file)
-
-
+DATABASE = "gcp"
 Base = declarative_base()
 
 
@@ -92,35 +87,6 @@ class ScrapInfo(Base):
     active = Column(Boolean, default=True)
 
 
-class CeleryTasks(Base):
-    __tablename__ = "celery_tasks"
-    id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
-    task_id = Column(Integer)
-    type = Column(String(50))
-    create_date = Column(DateTime, default=datetime.now())
-    status = Column(String(20))
-    done = Column(Boolean, default=0)
-    time_start = Column(DateTime)
-    time_end = Column(DateTime)
-    runtime = Column(Float)
-    pages = Column(String(20))
-    start_page = Column(String(20))
-    threads = Column(Integer)
-
-
-class Runtime(Base):
-    __tablename__ = "runtime"
-    id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
-    n_offers = Column(Integer)
-    threads = Column(Integer)
-    time_s = Column(Float)
-    time_per_offer = Column(Float)
-    type = Column(String(20))
-    page = Column(Integer)
-    n_scrap = Column(Integer)
-    create_date = Column(DateTime, default=datetime.now())
-
-
 class ErrorLogs(Base):
     __tablename__ = "error_logs"
     id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
@@ -130,57 +96,56 @@ class ErrorLogs(Base):
     exception = Column(String(1000))
 
 
-
-db_url = f'mysql+pymysql://{conf["username"]}:{conf["password"]}@{conf["database_ip"]}/{conf["database_name"]}'
-
-engine = create_engine(
-    db_url,
-    pool_size=10,  # Domyślnie 5
-    max_overflow=20,  # Domyślnie 10
-    pool_timeout=30,  # Domyślnie 30 sekund
-    pool_recycle=1800,  # Recykluj połączenia co 30 minut
-)
-
-
-# Funkcja do sprawdzania i tworzenia tabel, jeśli nie istnieją
+class PracujJobOffers(Base):
+    __tablename__ = "PracujJobOffers"
+    id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
+    link = Column(String(255))
+    title = Column(String(255))
+    salary = Column(String(255))
+    company = Column(String(255))
+    location = Column(String(255))
+    tags = Column(String(255))
+    additional_info = Column(String(1000))
+    date_pub = Column(String(50))
 
 
-def create_tables_and_columns_if_not_exists(engine, base):
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    metadata = MetaData(bind=engine)
-    tables_to_create = []
+class ModelsToDb:
 
-    # Loop through all table classes
-    for table_class in base.__subclasses__():
-        test = base.__subclasses__()
-        if hasattr(table_class, "__tablename__"):
-            table_name = table_class.__tablename__
-            if table_name not in existing_tables:
-                tables_to_create.append(table_class.__table__)
-            else:
-                # Check for missing columns
-                table = table_class.__table__
-                existing_columns = {
-                    col["name"] for col in inspector.get_columns(table_name)
-                }
-                for column in table.columns:
-                    if column.name not in existing_columns:
-                        column_type = column.type.compile(engine.dialect)
-                        with engine.connect() as conn:
-                            conn.execute(
-                                f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column_type}"
-                            )
+    def __init__(self):
+        self.base = Base
+        dbmanager = DatabaseManager(database=DATABASE)
+        self.engine = dbmanager.engine
+        self.create_tables_and_columns_if_not_exists()
 
-    # Create any new tables
-    if tables_to_create:
-        base.metadata.create_all(engine, tables=tables_to_create)
+    def create_tables_and_columns_if_not_exists(self):
+        inspector = inspect(self.engine)
+        existing_tables = inspector.get_table_names()
+        metadata = MetaData(bind=self.engine)
+        tables_to_create = []
+        test = self.base.__subclasses__()
+        # Loop through all table classes
+        for table_class in self.base.__subclasses__():
+            test = self.base.__subclasses__()
+            if hasattr(table_class, "__tablename__"):
+                table_name = table_class.__tablename__
+                if table_name not in existing_tables:
+                    tables_to_create.append(table_class.__table__)
+                else:
+                    # Check for missing columns
+                    table = table_class.__table__
+                    existing_columns = {
+                        col["name"] for col in inspector.get_columns(table_name)
+                    }
+                    for column in table.columns:
+                        if column.name not in existing_columns:
+                            column_type = column.type.compile(self.engine.dialect)
+                            with self.engine.connect() as conn:
+                                conn.execute(
+                                    f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column_type}"
+                                )
+        if tables_to_create:
+            self.base.metadata.create_all(self.engine, tables=tables_to_create)
 
 
-# Utwórz tabele tylko jeśli nie istnieją
-create_tables_and_columns_if_not_exists(engine, Base)
-
-# Utworzenie sesji
-Session = sessionmaker(bind=engine)
-
-print("Done")
+if __name__ == "__main__":
+    ModelsToDb()

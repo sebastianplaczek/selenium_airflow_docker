@@ -1,19 +1,22 @@
 from importlib.machinery import SourceFileLoader
 import os
+from sqlalchemy import inspect, create_engine, MetaData
 
 pwd = os.path.dirname(os.path.realpath(__file__)) + "/models.py"
 models = SourceFileLoader("models", pwd).load_module()
+from sqlalchemy.orm import sessionmaker
 
-# Session = models.Session()
-# Offers = models.Offers()
-# OffersLoc = models.OffersLoc()
-# NominatimApi = models.NominatimApi()
-# CeleryTasks = models.CeleryTasks()
-# engine = models.engine
-
+db_url = "mysql+pymysql://normal:qwerty123@35.205.233.17:3306/scraper-gcp"
+engine = create_engine(
+    db_url,
+    pool_size=10,  # Domyślnie 5
+    max_overflow=20,  # Domyślnie 10
+    pool_timeout=30,  # Domyślnie 30 sekund
+    pool_recycle=1800,  # Recykluj połączenia co 30 minut
+)
+Session = sessionmaker(bind=engine)
 
 from models import (
-    Session,
     Offers,
     OtodomWebsite,
     ScrapInfo,
@@ -22,7 +25,6 @@ from models import (
     ErrorLogs,
     CeleryTasks,
     NominatimApi,
-    engine,
 )
 
 
@@ -80,7 +82,7 @@ class Filler:
         conf["start_id"] = int(self.df["start_id"][0])
         conf["end_id"] = int(self.df["end_id"][0])
 
-        with open("fill_conf.yaml", "w") as file:
+        with open("conf\fill_conf.yaml", "w") as file:
             yaml.dump(conf, file, default_flow_style=False)
 
     def nominatim_request(self, address, offer_id):

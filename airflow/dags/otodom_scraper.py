@@ -21,8 +21,9 @@ import sys
 from datetime import datetime
 import timeit
 
-
+from sqlalchemy import inspect, create_engine, MetaData
 from importlib.machinery import SourceFileLoader
+from sqlalchemy.orm import sessionmaker
 
 pwd = os.path.dirname(os.path.realpath(__file__)) + "/models.py"
 models = SourceFileLoader("models", pwd).load_module()
@@ -37,7 +38,6 @@ models = SourceFileLoader("models", pwd).load_module()
 # CeleryTasks = models.CeleryTasks()
 
 from models import (
-    Session,
     Offers,
     OtodomWebsite,
     ScrapInfo,
@@ -47,6 +47,15 @@ from models import (
     CeleryTasks,
 )
 
+db_url = "mysql+pymysql://normal:qwerty123@35.205.233.17:3306/scraper-gcp"
+engine = create_engine(
+    db_url,
+    pool_size=10,  # Domyślnie 5
+    max_overflow=20,  # Domyślnie 10
+    pool_timeout=30,  # Domyślnie 30 sekund
+    pool_recycle=1800,  # Recykluj połączenia co 30 minut
+)
+Session = sessionmaker(bind=engine)
 
 WEBS = {
     "dom_pierwotny": "https://www.otodom.pl/pl/wyniki/sprzedaz/dom%2Crynek-pierwotny/cala-polska?ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&limit=72",
@@ -125,13 +134,13 @@ class Scraper:
 
             print(f"Number of pages : {type} {self.number_of_pages}")
 
-            if self.number_of_pages <1:
+            if self.number_of_pages < 1:
                 raise ValueError(f"{type} has {self.number_of_pages} number of pages")
 
         session.commit()
         session.close()
 
-        with open("scrap_conf.yaml", "w") as file:
+        with open("conf\scrap_conf.yaml", "w") as file:
             yaml.dump(conf, file, default_flow_style=False)
 
     def find_wrong_letters(self, my_str):
@@ -432,7 +441,7 @@ class Scraper:
         return pages_to_scrap
 
     def run_tests(self):
-        print('Start test run')
+        print("Start test run")
         for type in [
             "dzialki",
             "mieszkanie_pierwotny",
@@ -452,26 +461,44 @@ class Scraper:
             df_size = df.shape[0]
             print(df_size)
 
-            if df_size ==0:
+            if df_size == 0:
                 raise ValueError(f"No offers in type {type}")
 
             for col in df.columns:
                 null_count = df[col].isnull().sum()
                 null_percent = null_count / df_size
-                if col in ["type","link","title","bumped","page","position","n_scrap","address","size","price","price_per_m","additional_parms"]:
+                if col in [
+                    "type",
+                    "link",
+                    "title",
+                    "bumped",
+                    "page",
+                    "position",
+                    "n_scrap",
+                    "address",
+                    "size",
+                    "price",
+                    "price_per_m",
+                    "additional_parms",
+                ]:
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
                         )
-                elif col in ["seller","seller_type"]:
+                elif col in ["seller", "seller_type"]:
                     if null_count == df_size:
-                        raise ValueError(f"Type: {type} column: {col} has all values null")
-                elif col=="rooms" and type != "dzialki":
+                        raise ValueError(
+                            f"Type: {type} column: {col} has all values null"
+                        )
+                elif col == "rooms" and type != "dzialki":
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
                         )
-                elif col =="floor" and type in ["mieszkanie_wtorny","mieszkanie_pierwotny"]:
+                elif col == "floor" and type in [
+                    "mieszkanie_wtorny",
+                    "mieszkanie_pierwotny",
+                ]:
                     if null_percent > 0.9:
                         raise ValueError(
                             f"Type: {type} column: {col} has {round(null_cont/df_size*100,2)}% null values"
