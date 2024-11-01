@@ -82,7 +82,7 @@ class Filler:
         conf["start_id"] = int(self.df["start_id"][0])
         conf["end_id"] = int(self.df["end_id"][0])
 
-        with open("conf\fill_conf.yaml", "w") as file:
+        with open("conf\fill_conf.yml", "w") as file:
             yaml.dump(conf, file, default_flow_style=False)
 
     def nominatim_request(self, address, offer_id):

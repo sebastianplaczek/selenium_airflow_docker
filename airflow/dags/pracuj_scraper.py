@@ -1,15 +1,4 @@
-import bs4
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.common.by import By
-import time
-from bs4 import BeautifulSoup
-import pdb
 import json
-import os
-import yaml
-
 from main_scraper import Scraper
 from models import PracujJobOffers
 
@@ -17,7 +6,7 @@ from models import PracujJobOffers
 class PracujScraper(Scraper):
 
     def scrap_one_page(self, i):
-        website = f"https://it.pracuj.pl/praca/it%20-%20rozw%C3%B3j%20oprogramowania;cc,5016?pn={i}"
+        website = self.WEBS[self.type].replace("$PAGE",str(i))
 
         soup = self.web_driver_manager.parse_web(website)
 
@@ -83,6 +72,7 @@ class PracujScraper(Scraper):
                 additional_info = None
 
             offer_dict["link"] = link
+            offer_dict["type"] = self.type
             offer_dict["title"] = title
             offer_dict["salary"] = salary
             offer_dict["company"] = company
@@ -90,26 +80,21 @@ class PracujScraper(Scraper):
             offer_dict["tags"] = tags_list
             offer_dict["additional_info"] = additional_info_list
             offer_dict["date_pub"] = date_pub
-            
+            offer_dict["create_date"] = self.create_date
 
             new_offer = PracujJobOffers(**offer_dict)
             self.database_manager.commit_object(new_offer)
 
-
-
-
-
-
-    def check_number_of_pages(self):
-        self.web_driver_manager.init_driver()
-        website = "https://it.pracuj.pl/praca/it%20-%20rozw%C3%B3j%20oprogramowania;cc,5016?pn=1"
-        soup = self.web_driver_manager.parse_web(website)
-        page_num = int(
+    def number_of_pages_from_soup(self,soup):
+        number_of_pages = int(
             soup.find("span", {"data-test": "top-pagination-max-page-number"}).text
         )
-        self.web_driver_manager.close_driver()
+        return number_of_pages
 
 
-obj = PracujScraper(system="windows", database="gcp")
-obj.scrap_chunk_pages(1, 1)
-test = 0
+# obj = PracujScraper(system="windows", database="gcp")
+# obj.scrap_chunk_pages(1,1)
+# test = 0
+
+# obj = PracujScraper(name="pracuj", system="windows", database="gcp")
+# test = 0

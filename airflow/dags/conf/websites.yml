@@ -1,0 +1,8 @@
+otodom:
+  dom_pierwotny: "https://www.otodom.pl/pl/wyniki/sprzedaz/dom%2Crynek-pierwotny/cala-polska?ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&limit=72&page=$PAGE"
+  mieszkanie_pierwotny: "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie%2Crynek-pierwotny/cala-polska?limit=72&ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&page=$PAGE"
+  dom_wtorny: "https://www.otodom.pl/pl/wyniki/sprzedaz/dom,rynek-wtorny/cala-polska?limit=72&ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&page=$PAGE"
+  mieszkanie_wtorny: "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie%2Crynek-wtorny/cala-polska?ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&limit=72&page=$PAGE"
+  dzialki: "https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/cala-polska?ownerTypeSingleSelect=ALL&viewType=listing&limit=72&page=$PAGE"
+pracuj:
+  rozwoj_oprogramowania: "https://it.pracuj.pl/praca/it%20-%20rozw%C3%B3j%20oprogramowania;cc,5016?pn=$PAGE"

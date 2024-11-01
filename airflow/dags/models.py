@@ -19,13 +19,14 @@ DATABASE = "gcp"
 Base = declarative_base()
 
 
-class Offers(Base):
-    __tablename__ = "offers"
+class OtodomOffers(Base):
+    __tablename__ = "OtodomOffers"
     id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
     link = Column(String(255))
     type = Column(String(20))
     title = Column(String(255))
     create_date = Column(DateTime, default=datetime.now())
+    data_date = Column(DateTime, default=datetime.now())
     seller = Column(String(255))
     seller_type = Column(String(255))
     page = Column(Integer)
@@ -99,6 +100,7 @@ class ErrorLogs(Base):
 class PracujJobOffers(Base):
     __tablename__ = "PracujJobOffers"
     id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
+    type = Column(String(255))
     link = Column(String(255))
     title = Column(String(255))
     salary = Column(String(255))
@@ -107,6 +109,8 @@ class PracujJobOffers(Base):
     tags = Column(String(255))
     additional_info = Column(String(1000))
     date_pub = Column(String(50))
+    create_date = Column(DateTime)
+    data_date = Column(DateTime, default=datetime.now())
 
 
 class ModelsToDb:

@@ -1,0 +1,11 @@
+# gcp
+gcp:
+  username: normal
+  password: qwerty123
+  database_ip : 35.205.233.17:3306
+  database_name: scraper-gcp
+docker_sql:
+  username: normal
+  password: qwerty123
+  database_ip : 172.22.0.2:3306
+  database_name: scrapper_db

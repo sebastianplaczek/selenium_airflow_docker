@@ -1,11 +1,9 @@
 from airflow import DAG
 
 from airflow.operators.python_operator import PythonOperator
-
-from airflow.utils.dates import days_ago
+from airflow.utils.task_group import TaskGroup
 
 from datetime import datetime, timedelta
-import sys
 import os
 import yaml
 
@@ -15,19 +13,14 @@ pwd = os.path.dirname(os.path.realpath(__file__)) + "/otodom_scraper.py"
 P = SourceFileLoader("otodom_scraper", pwd).load_module()
 
 
-def scrap_worker(start, chunk_size, n_pages, type):
+def scrap_worker(start, chunk_size, n_pages, type,create_date):
     size = min(chunk_size, n_pages - start - 1)
-    model = P.Scraper(save_to_db=True, threads=5)
-    model.scrap_pages(type, start, size)
-
-
-def check_pages():
-    model = P.Scraper(threads=5)
-    model.check_pages()
+    model = P.OtodomScraper(name='otodom',system='linux',database='gcp',create_date=create_date)
+    model.scrap_chunk_pages(start, size,type)
 
 
 def test_scraper():
-    model = P.Scraper(save_to_db=False, test_run=True, threads=5)
+    model = P.OtodomScraper(name='otodom',system='linux',database='gcp')
     model.run_tests()
 
 
@@ -38,46 +31,49 @@ default_args = {
 }
 
 with DAG(
-    "scrap_offers_dag",
+    "scrap_otodom_dag",
     default_args=default_args,
     description="A simple async DAG",
     schedule_interval=None,
     catchup=False,
-    max_active_tasks=4,
-    concurrency=4,
+    max_active_tasks=2,
+    concurrency=2,
 ) as dag:
 
     test_scraper_task = PythonOperator(
-        task_id=f"tests",
+        task_id="tests",
         python_callable=test_scraper,
         dag=dag,
     )
 
-    check_pages_task = PythonOperator(
-        task_id=f"check_pages",
-        python_callable=check_pages,
-        dag=dag,
-    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    conf_path = os.path.join(current_dir, "conf", "otodom_conf.yml")
 
-    with open("scrap_conf.yaml", "r") as file:
+    with open(conf_path, "r") as file:
         conf = yaml.safe_load(file)
 
-    tasks = []
-    for type, n_pages in conf.items():
-        chunk_size = 25
-        # if type in ['dzialki']:
-        for i in range(0, n_pages, chunk_size):
-            task = PythonOperator(
-                task_id=f"scrapping_{type}_{i}",
-                python_callable=scrap_worker,
-                op_args=[i + 1, chunk_size, n_pages, type],
-                dag=dag,
-                pool="async_pool",
-                retries=3,
-                retry_delay=timedelta(minutes=5),
-            )
-            tasks.append(task)
+    with TaskGroup(
+        "scrap_task_group", tooltip="Task Group"
+    ) as scrap_task_group:
+        for type, n_pages in conf.items():
+            chunk_size = 25
+            for i in range(0, n_pages, chunk_size):
+                task = PythonOperator(
+                    task_id=f"scrapping_{type}_{i}",
+                    python_callable=scrap_worker,
+                    op_kwargs={
+                        "start": i + 1,
+                        "chunk_size": chunk_size,
+                        "n_pages": n_pages,
+                        "create_date": "{{ logical_date }}",
+                        "type" : type,
+                    },
+                    dag=dag,
+                    pool="async_pool",
+                    retries=3,
+                    retry_delay=timedelta(minutes=5),
+                )
 
-        print(f"{type} added to queue")
+            print(f"{type} added to queue")
 
-    test_scraper_task >> check_pages_task >> tasks
+    test_scraper_task  >> scrap_task_group

@@ -9,19 +9,10 @@ import yaml
 from sqlalchemy.orm import sessionmaker
 from abc import abstractmethod
 from functools import wraps
-
-
-WEBS = {
-    "dom_pierwotny": "https://www.otodom.pl/pl/wyniki/sprzedaz/dom%2Crynek-pierwotny/cala-polska?ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&limit=72",
-    "mieszkanie_pierwotny": "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie%2Crynek-pierwotny/cala-polska?limit=72&ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing",
-    "dom_wtorny": "https://www.otodom.pl/pl/wyniki/sprzedaz/dom,rynek-wtorny/cala-polska?limit=72&ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing",
-    "mieszkanie_wtorny": "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie%2Crynek-wtorny/cala-polska?ownerTypeSingleSelect=ALL&by=DEFAULT&direction=DESC&viewType=listing&limit=72",
-    "dzialki": "https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/cala-polska?ownerTypeSingleSelect=ALL&viewType=listing&limit=72",
-}
+from datetime import datetime
 
 
 class WebDriverManager:
-
     def __init__(self, system):
         self.set_options(system)
 
@@ -50,12 +41,11 @@ class WebDriverManager:
         self.driver = webdriver.Firefox(
             options=self.firefox_options, service=self.service
         )
-    
 
     def close_driver(self):
         if self.driver:
             self.driver.quit()
-    
+
     def parse_web(self, website):
         self.driver.get(website)
         html = self.driver.page_source
@@ -78,7 +68,7 @@ class DatabaseManager:
     def __init__(self, database, enabled=True):
         self.enabled = enabled
         self.database = database
-        self.conf = ConfigReader("conf_db.yaml").config[database]
+        self.conf = ConfigReader("conf_db.yml").config[database]
 
         db_url = f'mysql+pymysql://{self.conf["username"]}:{self.conf["password"]}@{self.conf["database_ip"]}/{self.conf["database_name"]}'
         self.engine = create_engine(
@@ -113,8 +103,9 @@ class DatabaseManager:
     @requires_enabled
     def add(self, object):
         self.session.add(object)
-    
-    def commit_object(self,object):
+
+    @requires_enabled
+    def commit_object(self, object):
         self.create_session()
         self.add(object)
         self.commit()
@@ -122,12 +113,22 @@ class DatabaseManager:
 
 
 class Scraper:
-
-    def __init__(self, system,database, save_to_db=True):
+    def __init__(self, name, system, database, create_date=None, save_to_db=True):
+        self.name = name
         self.web_driver_manager = WebDriverManager(system=system)
-        self.database_manager = DatabaseManager(database=database,enabled=save_to_db)
+        self.database_manager = DatabaseManager(database=database, enabled=save_to_db)
+        self.WEBS = ConfigReader("websites.yml").config[name]
+        self.store_data = False
+        if create_date:
+            print('create_date', create_date,type(create_date))
+            self.create_date = datetime.fromisoformat(create_date).date()
+        else:
+            self.create_date = datetime.now().date()
 
-    def scrap_chunk_pages(self, start_page, chunk_size):
+        self.number_of_pages_to_config()
+
+    def scrap_chunk_pages(self, start_page, chunk_size, type):
+        self.type = type
         self.web_driver_manager.init_driver()
         for page_num in range(start_page, start_page + chunk_size):
             for z in range(0, 3):
@@ -141,10 +142,25 @@ class Scraper:
                     print(f"Retrying open the website {z}")
         self.web_driver_manager.close_driver()
 
+    def number_of_pages_to_config(self):
+        self.web_driver_manager.init_driver()
+        conf_dict = {}
+        for type, website in self.WEBS.items():
+            website = website.replace("$PAGE", "1")
+            soup = self.web_driver_manager.parse_web(website)
+            self.number_of_pages = self.number_of_pages_from_soup(soup)
+            conf_dict[type] = self.number_of_pages
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        conf_path = os.path.join(current_dir, "conf", f"{self.name}_conf.yml")
+        self.web_driver_manager.close_driver()
+        with open(conf_path, "w") as file:
+            yaml.dump(conf_dict, file, default_flow_style=False)
+
     @abstractmethod
     def scrap_one_page(self):
         pass
 
     @abstractmethod
-    def check_number_of_pages(self):
+    def number_of_pages_from_soup(self):
         pass

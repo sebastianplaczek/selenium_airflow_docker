@@ -37,7 +37,7 @@ with DAG(
     concurrency=15,
 ) as dag:
 
-    with open("fill_conf.yaml", "r") as file:
+    with open("fill_conf.yml", "r") as file:
         conf = yaml.safe_load(file)
 
     tasks = []
